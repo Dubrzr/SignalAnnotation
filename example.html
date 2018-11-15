@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <title>SignalAnnotation</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css" integrity="sha384-MCw98/SFnGE8fJT3GXwEOngsV7Zt27NXFoaoApmYm81iuXoPkFOJwJ8ERdknLPMO" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/open-iconic/1.1.1/font/css/open-iconic-bootstrap.min.css" integrity="sha256-BJ/G+e+y7bQdrYkS2RBTyNfBHpA9IuGaPmf9htub5MQ=" crossorigin="anonymous" />
+</head>
+<body>
+    <div id="canvass"></div>
+    <button type="button" id="save">Save</button>
+    <div class="form-group form-check">
+        <input type="checkbox" class="form-check-input" id="magnetism">
+        <label class="form-check-label" for="magnetism">Magnetism</label>
+        <span class="oi oi-person" title="person" aria-hidden="true"></span>
+        <button id="moveLeft" type="button" class="btn btn-outline-secondary"><span class="oi oi-arrow-thick-left"></span></button>
+        <button id="moveRight" type="button" class="btn btn-outline-secondary"><span class="oi oi-arrow-thick-right"></span></button>
+    </div>
+
+    <!-- Bootstrap -->
+    <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js" integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.3/umd/popper.min.js" integrity="sha384-ZMP7rVo3mIykV+2+9J3UJ46jBk0WLaUAdn689aCwoqbBJiSnjAK/l8WvCWPIPm49" crossorigin="anonymous"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/js/bootstrap.min.js" integrity="sha384-ChfqqxuZUCnJSK3+MXmPNIyE6ZbWh2IMqE241rYiqJxyMiZ6OW/JmZQ5stwEULTy" crossorigin="anonymous"></script>
+
+    <!-- Signal annotation -->
+    <script src="concrete.min.js"></script>
+    <script src="annotator.js"></script>
+    <script type="text/javascript">
+        const sig_colors = {
+            "II": "#00FF00",
+            "AVR": "#00FF00",
+            "V": "#00FF00",
+            "RESP": "#FFFF00",
+            "PLETH": "#82CEFC",
+            "ABP": "#FF0000",
+            "CVP": "#FAA804",
+        };
+
+        const canvass = document.getElementById("canvass");
+
+        let request = new XMLHttpRequest();
+        request.open('GET', 'test_data.json', false);  // `false` makes the request synchronous
+        request.send(null);
+
+        var sig_name = null;
+        var values = null;
+        if (request.status === 200) {
+            const data = JSON.parse(request.responseText);
+            sig_name = data.sig_name;
+            values = data.data;
+        }
+        console.assert(sig_name.length == values.length);
+
+        let z = 0;
+
+        let annotators = [];
+        for (let i = 0; i < sig_name.length; i++) {
+            let subDiv = canvass.appendChild(document.createElement('div'));
+            const ann = new Annotator(
+                subDiv,
+                2000,
+                100,
+                sig_name[i], 
+                values[i], 
+                125, 
+                0, 
+                "#000", 
+                sig_colors[sig_name[i]], 
+                document.querySelector('#magnetism:checked') !== null,
+                1000);
+            annotators.push(ann);
+        }
+
+        // window.setInterval(() => {
+        //     for (let idx in annotators) {
+        //         const ann = annotators[idx];
+        //         ann.moveTo(z*1);
+        //         console.log("test");
+        //     }
+        //     z += 1;
+        // }, 1);
+
+        document.getElementById("save").addEventListener("click", () => {
+            for (let idx in annotators) {
+                const ann = annotators[idx];
+                const annotations = ann.get_annotations();
+                console.log(annotations);
+            }
+            alert("Saved annotations :)");
+        });
+
+        function smooth(x) {
+            // Returns smoothed values between zero and one
+            if (x <= -1)
+                return 0;
+            if (x >= 1)
+                return 1;
+            return 2/(1+Math.exp(-5*x))/2;
+        }
+        function sleep(ms) {
+          return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        let moving = false;
+        async function moveToSmooth(offset, animation_length_ms) {
+            moving = true;
+            if (annotators.length == 0)
+                return;
+
+            var start_offset = annotators[0].current_offset;
+            let diff = offset - start_offset;
+
+            // const movePerMS = diff / animation_length_ms;
+            // const moveEveryMS = 1 / movePerMS;
+            // let move = 0;
+            // let moveDelay = 0;
+            // if (movePerMS < 1) {
+            //     move = 1
+            //     moveDelay = moveEveryMS;
+            // } else {
+            //     move = Math.floor(movePerMS);
+            //     moveDelay = 1;
+            // }
+
+            // console.log(offset, animation_length_ms, move, moveDelay, diff);
+
+
+            // Smoothed
+            const start = (new Date()).getTime(); // -1
+            const end = start + animation_length_ms; // +1
+
+            let now = (new Date()).getTime();
+            while (now < end) {
+                const elapsed = now - start;
+                const expected_offset = Math.floor(smooth(2*(elapsed/animation_length_ms)-1) * diff);
+                console.log(elapsed, expected_offset, start_offset + expected_offset);
+                for (let idx in annotators) {
+                    annotators[idx].moveTo(start_offset + expected_offset);
+                }
+                now = (new Date()).getTime();
+                await sleep(1);
+            }
+
+            for (let idx in annotators) {
+                annotators[idx].moveTo(offset);
+            }
+            moving = false;
+        }
+
+        document.getElementById("moveLeft").addEventListener("click", () => {
+            if (moving)
+                return;
+            z = Math.max(0, z-1);
+            moveToSmooth(z*125, 250);
+        });
+
+        document.getElementById("moveRight").addEventListener("click", () => {
+            if (moving)
+                return;
+            z += 1;
+            moveToSmooth(z*125, 250);
+        });
+
+        document.getElementById("magnetism").addEventListener("change", (event) => {
+            for (let idx in annotators) {
+                const ann = annotators[idx];
+                if (event.target.checked) {
+                    ann.enable_magnetism();
+                    console.log("Enabled magnetism :D");
+                } else {
+                    ann.disable_magnetism();
+                    console.log("Disabled magnetism :o");
+                }
+            }
+        }); 
+        document.addEventListener('keydown', function(event) {
+            if (moving)
+                return;
+            if(event.keyCode == 37) {
+                z = Math.max(0, z-1);
+                moveToSmooth(z*125, 250);                
+            }
+            else if(event.keyCode == 39) {
+                z += 1;
+                moveToSmooth(z*125, 250);
+            }
+        });
+
+        var drag = false;
+        var dragStart;
+        var dragEnd;
+
+        // canvass.addEventListener('mousedown', function(event) {
+        //     console.log('mousedown');
+        //     console.log(event);
+        //     dragStart = {
+        //         x: event.pageX - canvass.offsetLeft,
+        //         y: event.pageY - canvass.offsetTop
+        //     }
+        //     drag = true;
+        // })
+
+        // canvass.addEventListener('mousemove', function(event) {
+        //     console.log('mousemove');
+        //     console.log(event);
+        //     if (drag) {
+        //         dragEnd = {
+        //             x: event.pageX - canvass.offsetLeft,
+        //             y: event.pageY - canvass.offsetTop
+        //         }
+        //         context.translate(dragEnd.x - dragStart.x, dragEnd.y - dragStart.y);    
+        //         dragStart = dragEnd
+        //     }
+        // })
+
+        canvass.addEventListener('mouseup',function(event){
+            console.log('mouseup');
+            console.log(event);
+            drag = false;
+        })
+    </script>
+</body>
+</html>
