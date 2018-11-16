@@ -5,6 +5,50 @@
     <title>SignalAnnotation</title>
     <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css" integrity="sha384-MCw98/SFnGE8fJT3GXwEOngsV7Zt27NXFoaoApmYm81iuXoPkFOJwJ8ERdknLPMO" crossorigin="anonymous">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/open-iconic/1.1.1/font/css/open-iconic-bootstrap.min.css" integrity="sha256-BJ/G+e+y7bQdrYkS2RBTyNfBHpA9IuGaPmf9htub5MQ=" crossorigin="anonymous" />
+    <style type="text/css">
+        /* context menu */
+        .context-menu {
+          display: none;
+          position: absolute;
+          z-index: 10;
+          padding: 12px 0;
+          width: 240px;
+          background-color: #fff;
+          border: solid 1px #dfdfdf;
+          box-shadow: 1px 1px 2px #cfcfcf;
+        }
+
+        .context-menu--active {
+          display: block;
+        }
+
+        .context-menu__items {
+          list-style: none;
+          margin: 0;
+          padding: 0;
+        }
+
+        .context-menu__item {
+          display: block;
+          margin-bottom: 4px;
+        }
+
+        .context-menu__item:last-child {
+          margin-bottom: 0;
+        }
+
+        .context-menu__link {
+          display: block;
+          padding: 4px 12px;
+          color: #0066aa;
+          text-decoration: none;
+        }
+
+        .context-menu__link:hover {
+          color: #fff;
+          background-color: #0066aa;
+        }
+    </style>
 </head>
 <body>
     <div id="canvass"></div>
@@ -16,6 +60,17 @@
         <button id="moveLeft" type="button" class="btn btn-outline-secondary"><span class="oi oi-arrow-thick-left"></span></button>
         <button id="moveRight" type="button" class="btn btn-outline-secondary"><span class="oi oi-arrow-thick-right"></span></button>
     </div>
+
+    <nav id="context-menu" class="context-menu">
+        <ul class="context-menu__items">
+            <li class="context-menu__item">
+                <a href="#" class="context-menu__link" data-action="Edit"><i class="fa fa-edit"></i> Edit</a>
+            </li>
+            <li class="context-menu__item">
+                <a href="#" class="context-menu__link" data-action="Delete"><i class="fa fa-times"></i> Delete</a>
+            </li>
+        </ul>
+    </nav>
 
     <!-- Bootstrap -->
     <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js" integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin="anonymous"></script>
@@ -42,8 +97,8 @@
         request.open('GET', 'test_data.json', false);  // `false` makes the request synchronous
         request.send(null);
 
-        var sig_name = null;
-        var values = null;
+        let sig_name = null;
+        let values = null;
         if (request.status === 200) {
             const data = JSON.parse(request.responseText);
             sig_name = data.sig_name;
@@ -51,9 +106,169 @@
         }
         console.assert(sig_name.length == values.length);
 
-        let z = 0;
+
+        const contextMenuClassName = "context-menu";
+        const contextMenuItemClassName = "context-menu__item";
+        const contextMenuLinkClassName = "context-menu__link";
+        const contextMenuActive = "context-menu--active";
+
+        const taskItemClassName = "task";
+        let taskItemInContext;
+
+        let clickCoords;
+        let clickCoordsX;
+        let clickCoordsY;
+
+        const menu = document.querySelector("#context-menu");
+        const menuItems = menu.querySelectorAll(".context-menu__item");
+        let menuState = 0;
+        let menuWidth;
+        let menuHeight;
+        let menuPosition;
+        let menuPositionX;
+        let menuPositionY;
+
+        let windowWidth;
+        let windowHeight;
+
+        let currentAnnotation;
+        let currentAnnotator;
 
         let annotators = [];
+
+        /**
+        * Function to check if we clicked inside an element with a particular class
+        * name.
+        * 
+        * @param {Object} e The event
+        * @param {String} className The class name to check against
+        * @return {Boolean}
+        */
+        function clickInsideElement(event, className) {
+            let el = event.srcElement || event.target;
+            if (el.classList.contains(className)) {
+                return el;
+            } else {
+                while (el = el.parentNode) {
+                    if (el.classList && el.classList.contains(className)) {
+                        return el;
+                    }
+                }
+            }
+            return false;
+        }
+
+        function getPosition(event) {
+            let posx = 0;
+            let posy = 0;
+
+            if (event.pageX || event.pageY) {
+                posx = event.pageX;
+                posy = event.pageY;
+            } else if (event.clientX || event.clientY) {
+                posx = event.clientX + document.body.scrollLeft + document.documentElement.scrollLeft;
+                posy = event.clientY + document.body.scrollTop + document.documentElement.scrollTop;
+            }
+            return {
+                x: posx,
+                y: posy
+            }
+        }
+
+        function positionMenu(event) {
+            clickCoords = getPosition(event);
+            clickCoordsX = clickCoords.x;
+            clickCoordsY = clickCoords.y;
+
+            menuWidth = menu.offsetWidth + 4;
+            menuHeight = menu.offsetHeight + 4;
+
+            windowWidth = window.innerWidth;
+            windowHeight = window.innerHeight;
+
+            if ( (windowWidth - clickCoordsX) < menuWidth ) {
+                menu.style.left = windowWidth - menuWidth + "px";
+            } else {
+                menu.style.left = clickCoordsX + "px";
+            }
+
+            if ( (windowHeight - clickCoordsY) < menuHeight ) {
+                menu.style.top = windowHeight - menuHeight + "px";
+            } else {
+                menu.style.top = clickCoordsY + "px";
+            }
+        }
+        
+        function toggleMenuOn() {
+            if (menuState !== 1) {
+                menuState = 1;
+                menu.classList.add(contextMenuActive);
+
+                for (let idx in annotators) {
+                    const ann = annotators[idx];
+                    ann.disable_annotations();
+                }
+            }
+        }
+
+        function toggleMenuOff() {
+            if (menuState !== 0) {
+                menuState = 0;
+                menu.classList.remove(contextMenuActive);
+
+                for (let idx in annotators) {
+                    const ann = annotators[idx];
+                    ann.enable_annotations();
+                }
+            }
+        }
+
+        function annotationLeftClickCallback(idx) {
+            function fun(event, annotation) {
+
+            }
+            return fun;
+        }
+        
+
+        function annotationRightClickCallback(idx) {
+            function fun(event, annotation) {
+                console.log("annotationRightClickCallback");
+                taskItemInContext = clickInsideElement(event, taskItemClassName);
+                event.preventDefault();
+                toggleMenuOn();
+                positionMenu(event);
+                currentAnnotation = annotation;
+                currentAnnotator = idx;
+            }
+            return fun;
+        }
+        
+
+        document.addEventListener("click", function(event) {
+            console.log("Clicked")
+            var clickeElIsLink = clickInsideElement(event, contextMenuLinkClassName);
+            if (clickeElIsLink) {
+                event.preventDefault();
+                const action = clickeElIsLink.getAttribute("data-action");
+                if (action === "Edit") {
+                }
+                else if (action === "Delete") {
+                    annotators[currentAnnotator].remove_annotation(currentAnnotation);
+                    toggleMenuOff();
+                }
+                console.log(action);
+            } else {
+                var button = event.which || event.button;
+                if (button === 1) {
+                    toggleMenuOff();
+                }
+            }
+        });
+        
+
+        let z = 0;
+
         for (let i = 0; i < sig_name.length; i++) {
             let subDiv = canvass.appendChild(document.createElement('div'));
             const ann = new Annotator(
@@ -68,17 +283,10 @@
                 sig_colors[sig_name[i]], 
                 document.querySelector('#magnetism:checked') !== null,
                 1000);
+            ann.setAnnotationLeftClickCallback(annotationLeftClickCallback(i));
+            ann.setAnnotationRightClickCallback(annotationRightClickCallback(i));
             annotators.push(ann);
         }
-
-        // window.setInterval(() => {
-        //     for (let idx in annotators) {
-        //         const ann = annotators[idx];
-        //         ann.moveTo(z*1);
-        //         console.log("test");
-        //     }
-        //     z += 1;
-        // }, 1);
 
         document.getElementById("save").addEventListener("click", () => {
             for (let idx in annotators) {
@@ -110,21 +318,6 @@
             var start_offset = annotators[0].current_offset;
             let diff = offset - start_offset;
 
-            // const movePerMS = diff / animation_length_ms;
-            // const moveEveryMS = 1 / movePerMS;
-            // let move = 0;
-            // let moveDelay = 0;
-            // if (movePerMS < 1) {
-            //     move = 1
-            //     moveDelay = moveEveryMS;
-            // } else {
-            //     move = Math.floor(movePerMS);
-            //     moveDelay = 1;
-            // }
-
-            // console.log(offset, animation_length_ms, move, moveDelay, diff);
-
-
             // Smoothed
             const start = (new Date()).getTime(); // -1
             const end = start + animation_length_ms; // +1
@@ -133,7 +326,7 @@
             while (now < end) {
                 const elapsed = now - start;
                 const expected_offset = Math.floor(smooth(2*(elapsed/animation_length_ms)-1) * diff);
-                console.log(elapsed, expected_offset, start_offset + expected_offset);
+                //console.log(elapsed, expected_offset, start_offset + expected_offset);
                 for (let idx in annotators) {
                     annotators[idx].moveTo(start_offset + expected_offset);
                 }
@@ -151,14 +344,14 @@
             if (moving)
                 return;
             z = Math.max(0, z-1);
-            moveToSmooth(z*125, 250);
+            moveToSmooth(z*125, 500);
         });
 
         document.getElementById("moveRight").addEventListener("click", () => {
             if (moving)
                 return;
             z += 1;
-            moveToSmooth(z*125, 250);
+            moveToSmooth(z*125, 500);
         });
 
         document.getElementById("magnetism").addEventListener("change", (event) => {
@@ -178,46 +371,13 @@
                 return;
             if(event.keyCode == 37) {
                 z = Math.max(0, z-1);
-                moveToSmooth(z*125, 250);                
+                moveToSmooth(z*125, 220);                
             }
             else if(event.keyCode == 39) {
                 z += 1;
-                moveToSmooth(z*125, 250);
+                moveToSmooth(z*125, 220);
             }
         });
-
-        var drag = false;
-        var dragStart;
-        var dragEnd;
-
-        // canvass.addEventListener('mousedown', function(event) {
-        //     console.log('mousedown');
-        //     console.log(event);
-        //     dragStart = {
-        //         x: event.pageX - canvass.offsetLeft,
-        //         y: event.pageY - canvass.offsetTop
-        //     }
-        //     drag = true;
-        // })
-
-        // canvass.addEventListener('mousemove', function(event) {
-        //     console.log('mousemove');
-        //     console.log(event);
-        //     if (drag) {
-        //         dragEnd = {
-        //             x: event.pageX - canvass.offsetLeft,
-        //             y: event.pageY - canvass.offsetTop
-        //         }
-        //         context.translate(dragEnd.x - dragStart.x, dragEnd.y - dragStart.y);    
-        //         dragStart = dragEnd
-        //     }
-        // })
-
-        canvass.addEventListener('mouseup',function(event){
-            console.log('mouseup');
-            console.log(event);
-            drag = false;
-        })
     </script>
 </body>
 </html>

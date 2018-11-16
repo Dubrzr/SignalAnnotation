@@ -96,32 +96,14 @@ class Annotator {
         .add(this.signalLayer)
         .add(this.annotationsLayer);
 
+    this.backgroundLayer.scene.context.fillStyle = "#000";
+    this.backgroundLayer.scene.context.fillRect(0, 0, this.w, this.h);
+    // this.annotationsLayer.scene.context.fillStyle = "rgba(255, 0, 255, 0.4)";
+    // this.annotationsLayer.scene.context.fillRect(0, 0, this.w/2, this.h);
+    this.viewport.render();
 
-    //this.backgroundLayer.scene.context.fillStyle = "#000";
-    //this.backgroundLayer.scene.context.fillRect(0, 0, this.w, this.h);
-
-    this.annotationsLayer.scene.context.fillStyle = '#000';
-    this.annotationsLayer.scene.context.fillRect(0, 0, this.w, this.h);
-
-
-    const me = this;
-    this.viewport.scene.canvas.addEventListener('mousemove', function(event) {
-        console.log("mousemove hover");
-        const boundingRect = me.viewport.scene.canvas.getBoundingClientRect();
-        const x = event.clientX - boundingRect.left;
-        const y = event.clientY - boundingRect.top;
-
-        if (x <= 1000) {
-            console.log(x)
-            me.annotationsLayer.visible = true;
-            me.viewport.render();
-        }
-        else {
-            me.annotationsLayer.visible = false;
-            me.viewport.render();
-        }
-    });
-
+    this.annotations = []
+    this.x1 = null;
 
     this.sig_name = sig_name;
     this.sig_vals = sig_vals;
@@ -134,17 +116,24 @@ class Annotator {
     this.signal_color = signal_color;
 
     this.magnetism = false;
-    this.range = range;
+    this.isAnnotationsEnabled = true;
+
+    this.annotationLeftClickCallback = null;
+    this.annotationRightClickCallback = null;
+
+    this.range = null;
     this.set_range(range);
 
     this.current_offset = 0;
     this.moveTo(0);
+
+    this._initializeListeners();
   }
 
-  clear() {
-    //this.backgroundLayer.scene.clear();
+  _clear() {
+    this.backgroundLayer.scene.clear();
     this.signalLayer.scene.clear();
-    //this.annotationsLayer.scene.clear();
+    this.annotationsLayer.scene.clear();
   }
 
   _normalize(values, y_0, y_1) {
@@ -156,13 +145,103 @@ class Annotator {
     return result;
   }
 
-  moveTo(offset) {
-    if (offset < 0 || offset >= this.sig_len) {
-        console.warn("Offset out of bounds while moving to " + offset);
+  _redrawAnnotations() {
+    console.log("_redrawAnnotations" + this.annotations);
+    this.annotationsLayer.scene.clear();
+
+    const pixelsPerPoint = this.w / this.range;
+    const rightOffset = this.current_offset + this.range;
+    const ctx = this.annotationsLayer.scene.context;
+
+    if (this.x1 != null && this.current_offset <= this.x1 && this.x1 < rightOffset) {
+        ctx.strokeStyle="rgba(255, 255, 255)";
+        const x1 = Math.floor((this.x1 - this.current_offset) * pixelsPerPoint);
+        // Start
+        ctx.beginPath();
+        ctx.moveTo(x1, 0);
+        ctx.lineTo(x1, this.h-1);
+        ctx.stroke();
+    }
+
+    if (this.annotations.length === 0) {
+        this.viewport.render();
         return;
     }
-    this.current_offset = offset;
-    this.clear();
+
+    for (let idx in this.annotations) {
+        const ann = this.annotations[idx];
+        if (ann.start < this.current_offset) {
+            if (ann.end < this.current_offset) {
+            }
+            else if (ann.end < rightOffset) {
+                ctx.fillStyle = "rgba(255, 0, 0, 0.2)";
+                ctx.strokeStyle="rgba(255, 0, 1)";
+
+                const x2 = (ann.end - this.current_offset) * pixelsPerPoint;
+
+                ctx.fillRect(0, 0, x2, this.h);
+
+                // End
+                ctx.beginPath();
+                ctx.moveTo(x2, 0);
+                ctx.lineTo(x2, this.h-1);
+                ctx.stroke();
+            }
+            else {
+                ctx.fillStyle = "rgba(0, 255, 0, 0.2)";
+
+                ctx.fillRect(0, 0, this.w, this.h);
+            }
+        }
+        else {
+            if (ann.start > rightOffset) {
+            }
+            else if (ann.end < rightOffset) {
+                ctx.fillStyle = "rgba(0, 0, 255, 0.2)";
+                ctx.strokeStyle="rgba(0, 0, 255, 1)";
+
+                const x1 = Math.floor((ann.start - this.current_offset) * pixelsPerPoint);
+                const x2 = Math.floor((ann.end - this.current_offset) * pixelsPerPoint);
+
+                ctx.fillRect(x1, 0, x2-x1, this.h);
+
+                // Start
+                ctx.beginPath();
+                ctx.moveTo(x1, 0);
+                ctx.lineTo(x1, this.h-1);
+                ctx.stroke();
+                // End
+                ctx.beginPath();
+                ctx.moveTo(x2, 0);
+                ctx.lineTo(x2, this.h-1);
+                ctx.stroke();
+            }
+            else {
+                ctx.fillStyle = "rgba(0, 255, 255, 0.2)";
+                ctx.strokeStyle="rgba(0, 255, 255, 1)";
+
+                const x1 = Math.floor((ann.start - this.current_offset) * pixelsPerPoint);
+
+                ctx.fillRect(x1, 0, this.w-x1, this.h);
+
+                // Start
+                ctx.beginPath();
+                ctx.moveTo(x1, 0);
+                ctx.lineTo(x1, this.h-1);
+                ctx.stroke();
+            }
+        }
+    this.viewport.render();
+    }
+  }
+
+  moveTo(offsetPts) {
+    if (offsetPts < 0 || offsetPts >= this.sig_len) {
+        console.warn("Offset out of bounds while moving to " + offsetPts);
+        return;
+    }
+    this.current_offset = offsetPts;
+    this.signalLayer.scene.clear();
 
     const ctx = this.signalLayer.scene.context;
 
@@ -170,79 +249,37 @@ class Annotator {
     ctx.lineCap = 'round';
     ctx.lineWidth = 1;
 
-    const pixelsPerPoint = this.w / this.range;
+    const pxsPerPts = this.w / this.range;
 
-    const end = Math.min(this.sig_len, offset + this.range);
-    const vals = this._normalize(this.sig_vals.slice(offset, end), 0, 100);
+    const end = Math.min(this.sig_len-1, offsetPts + this.range);
+    const vals = this._normalize(this.sig_vals.slice(offsetPts, end), 0, this.h);
 
     ctx.beginPath();
     ctx.moveTo(0, vals[0]);
     for (let i = 0; i < vals.length; i++) {
         if (i >= this.sig_len)
             break;
-        ctx.lineTo(Math.floor(pixelsPerPoint * i), vals[i]);
+        ctx.lineTo(Math.floor(pxsPerPts * i), vals[i]);
     }
     ctx.stroke();
     this.viewport.render();
+
+    if (this.isAnnotationsEnabled)
+        this._redrawAnnotations();
   }
 
-  moveToWithAnimation(offset, animation_length_ms) {
-    if (offset < 0 || offset >= this.sig_len) {
-        console.warn("Offset out of bounds while moving to " + offset);
+  set_range(rangePoints) {
+    if (rangePoints < 1) {
+        console.warn("Range unexpected while setting new range " + rangePoints);
         return;
     }
-
-    const directionRight = this.current_offset < offset;
-
-    let diff = 0;
-    if (directionRight) {
-        diff = offset - this.current_offset;
-    } else {
-        diff = this.current_offset - offset;
-    }
-
-    const movePerMS = diff / animation_length_ms;
-    const moveEveryMS = 1 / movePerMS;
-    let move = 0;
-    let moveDelay = 0;
-    if (movePerMS < 1) {
-        move = 1
-        moveDelay = moveEveryMS;
-    } else {
-        move = Math.floor(movePerMS);
-        moveDelay = 1;
-    }
-
-    console.log(offset, animation_length_ms, move, moveDelay, diff);
-
-    const startTimeMS = (new Date()).getTime();
-
-    let k = 0;
-    const startOffset = this.current_offset;
-    let me = this;
-    async function f() {
-        while ((move * k) < diff) {
-            if (((new Date()).getTime() - startTimeMS) < (k+1) * moveDelay)
-                await sleep(moveDelay);
-            me.moveTo(startOffset + (directionRight ? 1 : -1) * move * k);
-            k += 1;
-        }
-    }
-    f();
-  }
-
-  set_range(range) {
-    if (range < 1) {
-        console.warn("Range unexpected while setting new range " + range);
-        return;
-    }
-    const end = Math.min(this.sig_len-1, range);
+    const end = Math.min(this.sig_len-1, rangePoints);
     // console.log(this.sig_len);
     // console.log(end);
     // console.log(this.sig_vals);
     // const result = largestTriangleThreeBuckets([this.sig_vals], 10);
     // console.log(result[0]);
-    this.range = range;
+    this.range = rangePoints;
   }
 
   get_annotations() {
@@ -256,5 +293,122 @@ class Annotator {
   disable_magnetism() {
     this.magnetism = false;
   }
+
+  enable_annotations() {
+    this.isAnnotationsEnabled = true;
+  }
+
+  disable_annotations() {
+    this.isAnnotationsEnabled = false;
+  }
+
+  remove_annotation(annotation) {
+    //console.log("indexof... " + this.annotations.indexOf(annotation));
+    for (let idx in this.annotations) {
+        const ann = this.annotations[idx];
+        if (ann.start === annotation.start && ann.end == annotation.end) {
+            //console.log("removing annotation at idx = " + idx)
+            this.annotations.splice(idx, 1);
+            break;
+        }
+    }
+    this._redrawAnnotations();
+  }
+
+
+  // LISTENERS
+  _initializeListeners() {
+    const me = this;
+    this.viewport.scene.canvas.addEventListener('mouseup', function(event) {
+        if (event.button !== 0 || !me.isAnnotationsEnabled)
+            return;
+
+        const boundingRect = me.viewport.scene.canvas.getBoundingClientRect();
+        const x = event.clientX - boundingRect.left;
+        //const y = event.clientY - boundingRect.top;
+
+        const pixelsPerPoint = me.w / me.range;
+        const clickOffset = Math.floor(me.current_offset + x / pixelsPerPoint)
+
+        let wasClickOnAnn = false;
+        for (let idx in me.annotations) {
+            const ann = me.annotations[idx];
+            if (ann.start <= clickOffset && clickOffset <= ann.end) {
+                if (me.annotationLeftClickCallback !== null) {
+                    me.annotationLeftClickCallback(event, ann);
+                }
+                wasClickOnAnn = true;
+                break;
+            }
+        }
+        if (wasClickOnAnn)
+            return;
+
+        if (me.x1 === null) {
+            me.x1 = clickOffset;
+        }
+        else {
+            const x2 = clickOffset;
+            let ann = null;
+            if (me.x1 < x2)
+                ann = {'start': me.x1, 'end': x2, 'type': 'unknown'};
+            else
+                ann = {'start': x2, 'end': me.x1, 'type': 'unknown'};
+            me.annotations.push(ann)
+            me.x1 = null;
+            console.log("created new ann:");
+            console.log(ann)
+        }
+
+        me._redrawAnnotations();
+    });
+
+    this.viewport.scene.canvas.addEventListener('contextmenu', function(event) {
+        const boundingRect = me.viewport.scene.canvas.getBoundingClientRect();
+        const x = event.clientX - boundingRect.left;
+        //const y = event.clientY - boundingRect.top;
+
+        const pixelsPerPoint = me.w / me.range;
+        const clickOffset = Math.floor(me.current_offset + x / pixelsPerPoint)
+
+        for (let idx in me.annotations) {
+            const ann = me.annotations[idx];
+            if (ann.start <= clickOffset && clickOffset <= ann.end) {
+                if (me.annotationRightClickCallback !== null) {
+                    me.annotationRightClickCallback(event, ann);
+                }
+                break;
+            }
+        }
+    });
+
+    this.viewport.scene.canvas.addEventListener("wheel", function(event){
+        console.log(event)
+        if(event.ctrlKey){
+            event.preventDefault();
+
+            const boundingRect = me.viewport.scene.canvas.getBoundingClientRect();
+            const x = event.clientX - boundingRect.left;
+
+            if (event.deltaY < 0) {
+                me.set_range(me.range * 0.9);
+            }
+            else if (event.deltaY > 0) {
+                me.set_range(me.range / 0.9);
+            }
+            //me.current_offset + (me.w/me.range)*x);
+            me.moveTo(me.current_offset);
+        }
+    });
+  }
+
+  setAnnotationLeftClickCallback(callback) {
+    this.annotationLeftClickCallback = callback;
+  }
+
+  setAnnotationRightClickCallback(callback) {
+    this.annotationRightClickCallback = callback;
+  }
+
 }
 
