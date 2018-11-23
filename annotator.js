@@ -40,13 +40,10 @@ class Annotator {
 
     this.backgroundLayer.scene.context.fillStyle = background_color;
     this.backgroundLayer.scene.context.fillRect(0, 0, this.w, this.h);
-    // this.annotationsLayer.scene.context.fillStyle = "rgba(255, 0, 255, 0.4)";
-    // this.annotationsLayer.scene.context.fillRect(0, 0, this.w/2, this.h);
-
 
     // Add signal name
     this.hudLayer.scene.context.textAlign = 'left';
-    this.hudLayer.scene.context.textBaseline = 'alphabetic';    
+    this.hudLayer.scene.context.textBaseline = 'alphabetic';
     this.hudLayer.scene.context.font = '16px arial';
     this.hudLayer.scene.context.strokeStyle = background_color;
     this.hudLayer.scene.context.lineWidth = 3;
@@ -69,8 +66,14 @@ class Annotator {
     this.background_color = background_color;
     this.signal_color = signal_color;
 
+    this.major_grid_x_step = major_grid_x_step;
+    this.minor_grid_x_step = minor_grid_x_step;
+    this.major_grid_y_step = major_grid_y_step;
+    this.minor_grid_y_step = minor_grid_y_step;
+
     this.magnetism = false;
     this.isAnnotationsEnabled = true;
+    this.isGridEnabled = true;
 
     this.annotationLeftClickCallback = null;
     this.annotationRightClickCallback = null;
@@ -124,15 +127,15 @@ class Annotator {
         return;
     }
 
+    ctx.fillStyle = "rgba(0, 255, 255, 0.2)";
+    ctx.strokeStyle="rgba(0, 255, 255)";
+
     for (let idx in this.annotations) {
         const ann = this.annotations[idx];
         if (ann.start < this.current_offset) {
             if (ann.end < this.current_offset) {
             }
             else if (ann.end < rightOffset) {
-                ctx.fillStyle = "rgba(255, 0, 0, 0.2)";
-                ctx.strokeStyle="rgba(255, 0, 1)";
-
                 const x2 = (ann.end - this.current_offset) * pixelsPerPoint;
 
                 ctx.fillRect(0, 0, x2, this.h);
@@ -144,7 +147,6 @@ class Annotator {
                 ctx.stroke();
             }
             else {
-                ctx.fillStyle = "rgba(0, 255, 0, 0.2)";
 
                 ctx.fillRect(0, 0, this.w, this.h);
             }
@@ -153,8 +155,6 @@ class Annotator {
             if (ann.start > rightOffset) {
             }
             else if (ann.end < rightOffset) {
-                ctx.fillStyle = "rgba(0, 0, 255, 0.2)";
-                ctx.strokeStyle="rgba(0, 0, 255, 1)";
 
                 const x1 = Math.floor((ann.start - this.current_offset) * pixelsPerPoint);
                 const x2 = Math.floor((ann.end - this.current_offset) * pixelsPerPoint);
@@ -173,8 +173,6 @@ class Annotator {
                 ctx.stroke();
             }
             else {
-                ctx.fillStyle = "rgba(0, 255, 255, 0.2)";
-                ctx.strokeStyle="rgba(0, 255, 255, 1)";
 
                 const x1 = Math.floor((ann.start - this.current_offset) * pixelsPerPoint);
 
@@ -189,6 +187,51 @@ class Annotator {
         }
     this.viewport.render();
     }
+  }
+
+  _drawXGrids(ctx, list_x_pts, style, width) {
+    ctx.strokeStyle = style;
+    ctx.lineWidth = width;
+
+    for (let idx in list_x_pts) {
+        const x = list_x_pts[idx];
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, this.h-1);
+        ctx.stroke();
+    }
+  }
+
+  _computeXList(step) {
+    const x1 = Math.floor(this.current_offset);
+    const x2 = Math.floor(this.current_offset + this.range);
+
+    // Find first
+    let i = x1;
+    while (true) {
+        if ((i % step) === 0) {
+            break;
+        }
+        i += 1;
+    }
+
+    const list_x_major_pts = [];
+    while (i < x2) {
+        list_x_major_pts.push(i);
+        i += step;
+    }
+    const pixelsPerPoint = this.w / this.range;
+    return list_x_major_pts.map(x => pixelsPerPoint * (x-x1));
+  }
+
+  _redrawGrids() {
+    this.gridLayer.scene.clear();
+
+    const ctx = this.gridLayer.scene.context;
+
+    this._drawXGrids(ctx, this._computeXList(this.major_grid_x_step), "#3f3f3f", 3);
+    this._drawXGrids(ctx, this._computeXList(this.minor_grid_x_step), "#3f3f3f", 1);
+    this.viewport.render();
   }
 
   moveTo(offsetPts) {
@@ -206,6 +249,7 @@ class Annotator {
     ctx.lineWidth = 1;
 
     const pxsPerPts = this.w / this.range;
+    const ptsPerPxs = this.range / this.w;
 
     const end = Math.min(this.sig_len, offsetPts + this.range);
     //const vals = this._normalize(this.sig_vals.slice(offsetPts, end), 0, this.h);
@@ -219,10 +263,23 @@ class Annotator {
         ctx.lineTo(Math.floor(pxsPerPts * i), vals[i]);
     }
     ctx.stroke();
+
+
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';    
+    ctx.font = '16px arial';
+    ctx.strokeStyle = this.background_color;
+    ctx.lineWidth = 3;
+    ctx.strokeText(pxsPerPts.toString().slice(0,3) + " pixel/point", this.w-100, 25);
+    ctx.fillStyle = this.signal_color;
+    ctx.fillText(pxsPerPts.toString().slice(0,3) + " pixel/point", this.w-100, 25);
+
     this.viewport.render();
 
     if (this.isAnnotationsEnabled)
         this._redrawAnnotations();
+    if (this.isGridEnabled)
+        this._redrawGrids();
   }
 
   zoomToEvent(event) {
@@ -246,20 +303,7 @@ class Annotator {
 
     const newOffset = Math.min(Math.max(0, offset_pts - this.range * x_percentage), this.sig_len);
 
-    // FIXME
     this.moveTo(newOffset);
-
-    // this.hoverSelectionLayer.scene.clear();
-    // const ctx = this.hoverSelectionLayer.scene.context;
-    
-    // ctx.strokeStyle="rgba(255, 255, 255)";
-    // const x1 = Math.floor((clickOffset - this.current_offset) * pixelsPerPoint);
-    // // Start
-    // ctx.beginPath();
-    // ctx.moveTo(x1, 0);
-    // ctx.lineTo(x1, this.h-1);
-    // ctx.stroke();
-    // this.viewport.render();
   }
 
   set_range(rangePoints) {
@@ -290,6 +334,14 @@ class Annotator {
 
   disable_magnetism() {
     this.magnetism = false;
+  }
+
+  enable_grids() {
+    this.isGridEnabled = true;
+  }
+
+  disable_grids() {
+    this.isGridEnabled = false;
   }
 
   enable_annotations() {
@@ -331,7 +383,7 @@ class Annotator {
     this.hoverSelectionLayer.scene.clear();
     const ctx = this.hoverSelectionLayer.scene.context;
     
-    ctx.strokeStyle="rgba(255, 255, 255)";
+    ctx.strokeStyle="#ff0084";
     const x1 = Math.floor((clickOffset - this.current_offset) * pixelsPerPoint);
     // Start
     ctx.beginPath();

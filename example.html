@@ -135,7 +135,7 @@
         let currentAnnotator;
 
         let annotators = [];
-        
+
         // Function to check if we clicked inside an element with a particular class name.
         function clickInsideElement(event, className) {
             let el = event.srcElement || event.target;
@@ -265,7 +265,7 @@
             const ann = new Annotator(
                 subDiv,
                 2000,
-                100,
+                160,
                 sig_name[i] + " [mV]",
                 values[i], 
                 125, 
@@ -274,7 +274,7 @@
                 sig_colors[sig_name[i]], 
                 document.querySelector('#magnetism:checked') !== null,
                 1000,
-                0,0,0,0);
+                125/2, 125/8, 100, 10);
             ann.setAnnotationLeftClickCallback(annotationLeftClickCallback(i));
             ann.setAnnotationRightClickCallback(annotationRightClickCallback(i));
             annotators.push(ann);
