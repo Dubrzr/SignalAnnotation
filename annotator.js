@@ -2,82 +2,18 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// Downsampling Time Series for Visual Representation - Skemman
-// https://skemman.is/bitstream/1946/15343/3/SS_MSthesis.pdf
-const floor = Math.floor;
-const abs = Math.abs;
-
-function largestTriangleThreeBuckets(data, threshold) {
-    var data_length = data.length;
-    if (threshold >= data_length || threshold === 0) {
-        return data; // Nothing to do
-    }
-
-    var sampled = [],
-        sampled_index = 0;
-
-    // Bucket size. Leave room for start and end data points
-    var every = (data_length - 2) / (threshold - 2);
-
-    var a = 0,  // Initially a is the first point in the triangle
-        max_area_point,
-        max_area,
-        area,
-        next_a;
-
-    sampled[ sampled_index++ ] = data[ a ]; // Always add the first point
-
-    for (var i = 0; i < threshold - 2; i++) {
-
-        // Calculate point average for next bucket (containing c)
-        var avg_x = 0,
-            avg_y = 0,
-            avg_range_start  = floor( ( i + 1 ) * every ) + 1,
-            avg_range_end    = floor( ( i + 2 ) * every ) + 1;
-        avg_range_end = avg_range_end < data_length ? avg_range_end : data_length;
-
-        var avg_range_length = avg_range_end - avg_range_start;
-
-        for ( ; avg_range_start<avg_range_end; avg_range_start++ ) {
-          avg_x += data[ avg_range_start ][ 0 ] * 1; // * 1 enforces Number (value may be Date)
-          avg_y += data[ avg_range_start ][ 1 ] * 1;
-        }
-        avg_x /= avg_range_length;
-        avg_y /= avg_range_length;
-
-        // Get the range for this bucket
-        var range_offs = floor( (i + 0) * every ) + 1,
-            range_to   = floor( (i + 1) * every ) + 1;
-
-        // Point a
-        var point_a_x = data[ a ][ 0 ] * 1, // enforce Number (value may be Date)
-            point_a_y = data[ a ][ 1 ] * 1;
-
-        max_area = area = -1;
-
-        for ( ; range_offs < range_to; range_offs++ ) {
-            // Calculate triangle area over three buckets
-            area = abs( ( point_a_x - avg_x ) * ( data[ range_offs ][ 1 ] - point_a_y ) -
-                        ( point_a_x - data[ range_offs ][ 0 ] ) * ( avg_y - point_a_y )
-                      ) * 0.5;
-            if ( area > max_area ) {
-                max_area = area;
-                max_area_point = data[ range_offs ];
-                next_a = range_offs; // Next a is this b
-            }
-        }
-
-        sampled[ sampled_index++ ] = max_area_point; // Pick this point from the bucket
-        a = next_a; // This a is the next a (chosen b)
-    }
-
-    sampled[ sampled_index++ ] = data[ data_length - 1 ]; // Always add last
-
-    return sampled;
-}
-
 class Annotator {
-  constructor(parent_el, width, height, sig_name, sig_vals, frequency, start_offset_ms, background_color, signal_color, magnetism, range) {
+  constructor(
+        parent_el,
+        width, height,
+        sig_name, sig_vals, frequency, start_offset_ms,
+        background_color, signal_color,
+        magnetism,
+        range,
+        major_grid_x_step,
+        minor_grid_x_step,
+        major_grid_y_step,
+        minor_grid_y_step) {
     this.w = width;
     this.h = height;
 
@@ -88,25 +24,43 @@ class Annotator {
     });
 
     this.backgroundLayer = new Concrete.Layer();
+    this.gridLayer = new Concrete.Layer();
     this.signalLayer = new Concrete.Layer();
     this.annotationsLayer = new Concrete.Layer();
+    this.hoverSelectionLayer = new Concrete.Layer();
+    this.hudLayer = new Concrete.Layer();
 
     this.viewport
         .add(this.backgroundLayer)
+        .add(this.gridLayer)
         .add(this.signalLayer)
-        .add(this.annotationsLayer);
+        .add(this.annotationsLayer)
+        .add(this.hoverSelectionLayer)
+        .add(this.hudLayer);
 
-    this.backgroundLayer.scene.context.fillStyle = "#000";
+    this.backgroundLayer.scene.context.fillStyle = background_color;
     this.backgroundLayer.scene.context.fillRect(0, 0, this.w, this.h);
     // this.annotationsLayer.scene.context.fillStyle = "rgba(255, 0, 255, 0.4)";
     // this.annotationsLayer.scene.context.fillRect(0, 0, this.w/2, this.h);
+
+
+    // Add signal name
+    this.hudLayer.scene.context.textAlign = 'left';
+    this.hudLayer.scene.context.textBaseline = 'alphabetic';    
+    this.hudLayer.scene.context.font = '16px arial';
+    this.hudLayer.scene.context.strokeStyle = background_color;
+    this.hudLayer.scene.context.lineWidth = 3;
+    this.hudLayer.scene.context.strokeText(sig_name, 4, 25);
+    this.hudLayer.scene.context.fillStyle = signal_color;
+    this.hudLayer.scene.context.fillText(sig_name, 4, 25);
+
     this.viewport.render();
 
     this.annotations = []
     this.x1 = null;
 
     this.sig_name = sig_name;
-    this.sig_vals = sig_vals;
+    this.sig_vals = this._normalize(sig_vals, 0, this.h);
     this.sig_len = sig_vals.length;
 
     this.frequency = frequency;
@@ -127,6 +81,8 @@ class Annotator {
     this.current_offset = 0;
     this.moveTo(0);
 
+    this.mouseHovering = false;
+
     this._initializeListeners();
   }
 
@@ -134,6 +90,7 @@ class Annotator {
     this.backgroundLayer.scene.clear();
     this.signalLayer.scene.clear();
     this.annotationsLayer.scene.clear();
+    this.hoverSelectionLayer.scene.clear();
   }
 
   _normalize(values, y_0, y_1) {
@@ -146,7 +103,6 @@ class Annotator {
   }
 
   _redrawAnnotations() {
-    console.log("_redrawAnnotations" + this.annotations);
     this.annotationsLayer.scene.clear();
 
     const pixelsPerPoint = this.w / this.range;
@@ -251,8 +207,9 @@ class Annotator {
 
     const pxsPerPts = this.w / this.range;
 
-    const end = Math.min(this.sig_len-1, offsetPts + this.range);
-    const vals = this._normalize(this.sig_vals.slice(offsetPts, end), 0, this.h);
+    const end = Math.min(this.sig_len, offsetPts + this.range);
+    //const vals = this._normalize(this.sig_vals.slice(offsetPts, end), 0, this.h);
+    const vals = this.sig_vals.slice(offsetPts, end);
 
     ctx.beginPath();
     ctx.moveTo(0, vals[0]);
@@ -268,6 +225,43 @@ class Annotator {
         this._redrawAnnotations();
   }
 
+  zoomToEvent(event) {
+    let multiplier;
+    if (event.deltaY < 0) {
+        multiplier = 0.9;
+    }
+    else if (event.deltaY > 0) {
+        multiplier = 1/0.9;
+    }
+
+    const boundingRect = this.viewport.scene.canvas.getBoundingClientRect();
+    const x_pxs = event.clientX - boundingRect.left;
+
+    const x_percentage = x_pxs / this.w
+
+    const pixelsPerPoint = this.w / this.range;
+    const offset_pts = Math.floor(this.current_offset + x_pxs / pixelsPerPoint);
+
+    this.range = this.range * multiplier;
+
+    const newOffset = Math.min(Math.max(0, offset_pts - this.range * x_percentage), this.sig_len);
+
+    // FIXME
+    this.moveTo(newOffset);
+
+    // this.hoverSelectionLayer.scene.clear();
+    // const ctx = this.hoverSelectionLayer.scene.context;
+    
+    // ctx.strokeStyle="rgba(255, 255, 255)";
+    // const x1 = Math.floor((clickOffset - this.current_offset) * pixelsPerPoint);
+    // // Start
+    // ctx.beginPath();
+    // ctx.moveTo(x1, 0);
+    // ctx.lineTo(x1, this.h-1);
+    // ctx.stroke();
+    // this.viewport.render();
+  }
+
   set_range(rangePoints) {
     if (rangePoints < 1) {
         console.warn("Range unexpected while setting new range " + rangePoints);
@@ -280,6 +274,10 @@ class Annotator {
     // const result = largestTriangleThreeBuckets([this.sig_vals], 10);
     // console.log(result[0]);
     this.range = rangePoints;
+  }
+
+  set_range_multiply(multiplier) {
+    this.set_range(this.range * multiplier);
   }
 
   get_annotations() {
@@ -315,10 +313,50 @@ class Annotator {
     this._redrawAnnotations();
   }
 
+  _redraw_hover_annotation_layer(event) {
+    if (!this.isAnnotationsEnabled || !this.mouseHovering) {
+        this.hoverSelectionLayer.scene.clear();
+        this.viewport.render();
+        return;
+    }
+
+    console.assert(this.mouseHovering);
+
+    const boundingRect = this.viewport.scene.canvas.getBoundingClientRect();
+    const x = event.clientX - boundingRect.left;
+
+    const pixelsPerPoint = this.w / this.range;
+    const clickOffset = Math.floor(this.current_offset + x / pixelsPerPoint)
+
+    this.hoverSelectionLayer.scene.clear();
+    const ctx = this.hoverSelectionLayer.scene.context;
+    
+    ctx.strokeStyle="rgba(255, 255, 255)";
+    const x1 = Math.floor((clickOffset - this.current_offset) * pixelsPerPoint);
+    // Start
+    ctx.beginPath();
+    ctx.moveTo(x1, 0);
+    ctx.lineTo(x1, this.h-1);
+    ctx.stroke();
+    this.viewport.render();
+  }
 
   // LISTENERS
   _initializeListeners() {
     const me = this;
+    this.viewport.scene.canvas.addEventListener('mouseover', function(event) {
+        me.mouseHovering = true;
+        me.viewport.scene.canvas.addEventListener('mousemove', me._redraw_hover_annotation_layer.bind(me));
+    });
+
+    this.viewport.scene.canvas.addEventListener('mouseout', function(event) {
+        me.mouseHovering = false;
+        me.viewport.scene.canvas.removeEventListener('mousemove', me._redraw_hover_annotation_layer.bind(me));
+
+        me.hoverSelectionLayer.scene.clear();
+        me.viewport.render();
+    });
+
     this.viewport.scene.canvas.addEventListener('mouseup', function(event) {
         if (event.button !== 0 || !me.isAnnotationsEnabled)
             return;
@@ -382,24 +420,7 @@ class Annotator {
         }
     });
 
-    this.viewport.scene.canvas.addEventListener("wheel", function(event){
-        console.log(event)
-        if(event.ctrlKey){
-            event.preventDefault();
-
-            const boundingRect = me.viewport.scene.canvas.getBoundingClientRect();
-            const x = event.clientX - boundingRect.left;
-
-            if (event.deltaY < 0) {
-                me.set_range(me.range * 0.9);
-            }
-            else if (event.deltaY > 0) {
-                me.set_range(me.range / 0.9);
-            }
-            //me.current_offset + (me.w/me.range)*x);
-            me.moveTo(me.current_offset);
-        }
-    });
+    
   }
 
   setAnnotationLeftClickCallback(callback) {

@@ -135,15 +135,8 @@
         let currentAnnotator;
 
         let annotators = [];
-
-        /**
-        * Function to check if we clicked inside an element with a particular class
-        * name.
-        * 
-        * @param {Object} e The event
-        * @param {String} className The class name to check against
-        * @return {Boolean}
-        */
+        
+        // Function to check if we clicked inside an element with a particular class name.
         function clickInsideElement(event, className) {
             let el = event.srcElement || event.target;
             if (el.classList.contains(className)) {
@@ -267,22 +260,21 @@
         });
         
 
-        let z = 0;
-
         for (let i = 0; i < sig_name.length; i++) {
             let subDiv = canvass.appendChild(document.createElement('div'));
             const ann = new Annotator(
                 subDiv,
                 2000,
                 100,
-                sig_name[i], 
+                sig_name[i] + " [mV]",
                 values[i], 
                 125, 
                 0, 
                 "#000", 
                 sig_colors[sig_name[i]], 
                 document.querySelector('#magnetism:checked') !== null,
-                1000);
+                1000,
+                0,0,0,0);
             ann.setAnnotationLeftClickCallback(annotationLeftClickCallback(i));
             ann.setAnnotationRightClickCallback(annotationRightClickCallback(i));
             annotators.push(ann);
@@ -310,13 +302,18 @@
         }
 
         let moving = false;
-        async function moveToSmooth(offset, animation_length_ms) {
+        async function moveToSmooth(diff_offset, animation_length_ms) {
             moving = true;
             if (annotators.length == 0)
                 return;
 
             var start_offset = annotators[0].current_offset;
-            let diff = offset - start_offset;
+            let start_offsets = [];
+            for (let idx in annotators) {
+                start_offsets.push(annotators[idx].current_offset);
+            }
+
+            // let diff = offset - start_offset;
 
             // Smoothed
             const start = (new Date()).getTime(); // -1
@@ -325,17 +322,17 @@
             let now = (new Date()).getTime();
             while (now < end) {
                 const elapsed = now - start;
-                const expected_offset = Math.floor(smooth(2*(elapsed/animation_length_ms)-1) * diff);
+                const expected_offset = Math.floor(smooth(2*(elapsed/animation_length_ms)-1) * diff_offset);
                 //console.log(elapsed, expected_offset, start_offset + expected_offset);
                 for (let idx in annotators) {
-                    annotators[idx].moveTo(start_offset + expected_offset);
+                    annotators[idx].moveTo(start_offsets[idx] + expected_offset);
                 }
                 now = (new Date()).getTime();
                 await sleep(1);
             }
 
             for (let idx in annotators) {
-                annotators[idx].moveTo(offset);
+                annotators[idx].moveTo(start_offsets[idx] + diff_offset);
             }
             moving = false;
         }
@@ -343,15 +340,13 @@
         document.getElementById("moveLeft").addEventListener("click", () => {
             if (moving)
                 return;
-            z = Math.max(0, z-1);
-            moveToSmooth(z*125, 500);
+            moveToSmooth(-125, 500);
         });
 
         document.getElementById("moveRight").addEventListener("click", () => {
             if (moving)
                 return;
-            z += 1;
-            moveToSmooth(z*125, 500);
+            moveToSmooth(125, 500);
         });
 
         document.getElementById("magnetism").addEventListener("change", (event) => {
@@ -370,12 +365,21 @@
             if (moving)
                 return;
             if(event.keyCode == 37) {
-                z = Math.max(0, z-1);
-                moveToSmooth(z*125, 220);                
+                moveToSmooth(-125, 220);                
             }
             else if(event.keyCode == 39) {
-                z += 1;
-                moveToSmooth(z*125, 220);
+                moveToSmooth(125, 220);
+            }
+        });
+
+        document.addEventListener("wheel", function(event){
+            if(event.ctrlKey){
+                event.preventDefault();
+
+                for (let idx in annotators) {
+                    const ann = annotators[idx];
+                    ann.zoomToEvent(event);
+                }
             }
         });
     </script>
