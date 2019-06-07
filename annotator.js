@@ -73,7 +73,7 @@ class Annotator {
 
     this.magnetism = false;
     this.isAnnotationsEnabled = true;
-    this.isGridEnabled = true;
+    this.isGridEnabled = false;
 
     this.annotationLeftClickCallback = null;
     this.annotationRightClickCallback = null;
@@ -278,8 +278,12 @@ class Annotator {
 
     if (this.isAnnotationsEnabled)
         this._redrawAnnotations();
+    else
+        this.annotationsLayer.scene.clear();      
     if (this.isGridEnabled)
         this._redrawGrids();
+    else
+        this.gridLayer.scene.clear();
   }
 
   zoomToEvent(event) {

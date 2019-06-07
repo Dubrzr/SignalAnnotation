@@ -52,14 +52,67 @@
 </head>
 <body>
     <div id="canvass"></div>
-    <button type="button" id="save">Save</button>
-    <div class="form-group form-check">
-        <input type="checkbox" class="form-check-input" id="magnetism">
-        <label class="form-check-label" for="magnetism">Magnetism</label>
-        <span class="oi oi-person" title="person" aria-hidden="true"></span>
-        <button id="moveLeft" type="button" class="btn btn-outline-secondary"><span class="oi oi-arrow-thick-left"></span></button>
-        <button id="moveRight" type="button" class="btn btn-outline-secondary"><span class="oi oi-arrow-thick-right"></span></button>
+
+    <div class="modal fade" id="helpModal" tabindex="-1" role="dialog" aria-labelledby="exampleModalLabel" aria-hidden="true">
+      <div class="modal-dialog" role="document">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="exampleModalLabel">How to use this Signal Annotator?</h5>
+            <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+              <span aria-hidden="true">&times;</span>
+            </button>
+          </div>
+          <div class="modal-body">
+            <h3>Move in the record</h3>
+            <ul>
+              <li><b>Zoom</b> = ctrl + Mouse Scrool</li>
+              <li><b>Move forward/backward</b> = using your <span class="oi oi-arrow-thick-left"></span> and <span class="oi oi-arrow-thick-right"></span> keys on your keyboard, or the arrows buttons available under the signals.</li>
+            </ul>
+            <h3>Annotate</h3>
+            <p>An annotation is defined by two timestamps: the beginning and the end of the annotation. When an annotation is a unique sample (not a timerange) the beginning equals the end.</p>
+            <ul>
+              <li><b>Annotate a sample</b> = Double click on the place where you would like to set your annotation. This will draw a vertical line.</li>
+              <li><b>Annotate a timerange</b> = First click on the beginning and then click on the end. This will draw a rectangle over the annotation.</li>
+              <li><b>Edit an annotation</b> = Right click on the annotation and click on the Edit option.</li>
+              <li><b>Delete an annotation</b> = Right click on the annotation and click on the Delete option.</li>
+            </ul>
+          </div>
+          <div class="modal-footer">
+            <a target="_blank" type="button" class="btn btn-primary" href="https://github.com/Dubrzr/SignalAnnotation/issues/new">I have one more question</a>
+            <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+          </div>
+        </div>
+      </div>
     </div>
+
+
+<div class="container">
+  <div class="row">
+    <div class="col-sm">
+      <div class="form-group form-check">
+          <input type="checkbox" class="form-check-input" id="annotations" checked>
+          <label class="form-check-label" for="annotations">Display annotations</label>
+          <br>
+          <input type="checkbox" class="form-check-input" id="grid">
+          <label class="form-check-label" for="grid">Display grid</label>
+          <br>
+          <input type="checkbox" class="form-check-input" id="magnetism">
+          <label class="form-check-label" for="magnetism">Magnetism (todo)</label>
+      </div>
+    </div>
+    <div class="col-sm">
+      <button id="moveLeft" type="button" class="btn btn-outline-secondary" title="Move backward"><span class="oi oi-arrow-thick-left"></span></button>
+      <button id="moveRight" type="button" class="btn btn-outline-secondary" title="Move forward"><span class="oi oi-arrow-thick-right"></span></button>
+    </div>
+    <div class="col-sm">
+      <button type="button" class="btn btn-success" id="save">Export annotations</button>
+      <button type="button" class="btn btn-info" data-toggle="modal" data-target="#helpModal">Help</button>
+      <a type="button" class="btn btn-primary" target="_blank" href="https://github.com/Dubrzr/SignalAnnotation">Contribute</a>
+    </div>
+  </div>
+</div>
+
+
 
     <nav id="context-menu" class="context-menu">
         <ul class="context-menu__items">
@@ -264,8 +317,8 @@
             let subDiv = canvass.appendChild(document.createElement('div'));
             const ann = new Annotator(
                 subDiv,
-                2000,
-                160,
+                1200,
+                110,
                 sig_name[i] + " [mV]",
                 values[i], 
                 125, 
@@ -286,7 +339,7 @@
                 const annotations = ann.get_annotations();
                 console.log(annotations);
             }
-            alert("Saved annotations :)");
+            alert("Exported annotations (TODO :p) :)");
         });
 
         function smooth(x) {
@@ -358,6 +411,26 @@
                 } else {
                     ann.disable_magnetism();
                     console.log("Disabled magnetism :o");
+                }
+            }
+        }); 
+        document.getElementById("grid").addEventListener("change", (event) => {
+            for (let idx in annotators) {
+                const ann = annotators[idx];
+                if (event.target.checked) {
+                    ann.enable_grids();
+                } else {
+                    ann.disable_grids();
+                }
+            }
+        }); 
+        document.getElementById("annotations").addEventListener("change", (event) => {
+            for (let idx in annotators) {
+                const ann = annotators[idx];
+                if (event.target.checked) {
+                    ann.enable_annotations();
+                } else {
+                    ann.disable_annotations();
                 }
             }
         }); 
