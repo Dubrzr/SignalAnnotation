@@ -355,10 +355,10 @@
             const result = [];
             for (let idx in annotators) {
                 const ann = annotators[idx];
-                result.push((ann.sig_name, ann.get_annotations()));
+                result.push([ann.sig_name, ann.get_annotations()]);
                 //console.log(annotations);
             }
-            send_json_to_clien("annotations.js", result);
+            send_json_to_clien("annotations.json", result);
             //alert("Exported annotations (TODO :p) :)");
         });
 
