@@ -8,6 +8,8 @@ Current state:
   * [x] From json file
   * [ ] From csv file
   * [ ] From uploaded (json/csv) file
+    * [ ] Add a new signal
+    * [ ] Delete a signal
 * Display data:
   * [x] Zoom in/out using ctrl+mouse scrool
   * [ ] Zoom in/out using interface buttons
