@@ -2,6 +2,8 @@
 
 Open-Source, Web-based application to Annotate signal, timeseries, waveforms...
 
+Preview here: https://sigannot.juliendubiel.net/
+
 ![Preview](preview.png)
 
 Current state: 
