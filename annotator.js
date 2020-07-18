@@ -329,7 +329,7 @@ class Annotator {
   }
 
   get_annotations() {
-    return "annotations";
+    return this.annotations;
   }
 
   enable_magnetism() {
