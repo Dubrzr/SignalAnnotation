@@ -341,13 +341,25 @@
             annotators.push(ann);
         }
 
+        function send_json_to_clien(filename, json_contents) {
+          var element = document.createElement('a');
+          element.setAttribute('href', "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(json_contents)));
+          element.setAttribute('download', filename);
+          element.style.display = 'none';
+          document.body.appendChild(element);
+          element.click();
+          document.body.removeChild(element);
+        }
+        
         document.getElementById("save").addEventListener("click", () => {
+            const result = [];
             for (let idx in annotators) {
                 const ann = annotators[idx];
-                const annotations = ann.get_annotations();
-                console.log(annotations);
+                result.push((ann.sig_name, ann.get_annotations()));
+                //console.log(annotations);
             }
-            alert("Exported annotations (TODO :p) :)");
+            send_json_to_clien("annotations.js", result);
+            //alert("Exported annotations (TODO :p) :)");
         });
 
         function smooth(x) {
