@@ -1,6 +1,8 @@
 # SignalAnnotation
 
-Web-based application to Annotate signal, timeseries, waveforms...
+Open-Source, Web-based application to Annotate signal, timeseries, waveforms...
+
+![Preview](preview.png)
 
 Current state: 
 
