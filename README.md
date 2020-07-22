@@ -9,11 +9,12 @@ Preview here: https://sigannot.juliendubiel.net/
 Current state: 
 
 * Load data:
-  * [x] From json file
-  * [ ] From csv file
-  * [ ] From uploaded (json/csv) file
-    * [ ] Add a new signal
-    * [ ] Delete a signal
+  * [ ] Add a new signal 
+    * [ ] From uploaded json file
+    * [ ] From uploaded csv file
+    * [x] From hardcoded json file link (for demo)
+    * [ ] From hardcoded csv file link (for demo)
+  * [ ] Delete a signal
   * [ ] Directly from Physionet for immediate public physiological data annotation 
 * Display data:
   * [x] Zoom in/out using ctrl+mouse scrool
