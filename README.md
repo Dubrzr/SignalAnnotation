@@ -40,21 +40,19 @@ Current state:
 
 ## Run the application
 
-This is currently a simple HTML file that you can open with your web-browser : open the `example.html` file.
-The data displayed by example.html is loaded from `test_data.json`.
+There are two usable files that you can simply open with your browser (after cloning/downloading this whole folder):
 
-The format of the json file must be like this:
+* `example.html`: as its name exaplains it, it's an example. The data displayed by example.html is loaded from `test_data.json`.
+* `app.html`: this is the final app that is currently under active development, you can try the implemented features, the format of the json file must be like this:
 
 ```json
-{"sig_name": ["My first signal", "My second signal"],"data":[[1, 1, 2, 1, 0, ...], [0.45,0.88, 0.98, 1.35...]]}
+{"values": [0.45,0.88, 0.98, 1.35...]}
 ```
-
-Where the sig_name list is a list of title for you signals, and data contains a list of list of numerics corresponding to your signals.
 
 
 ## Development
 
-This application is developped as a library file : `annotator.js`. `example.html` is an example usage of the library.
+This application is developped as a library file : `annotator.js` that might be used anywhere else, example.html and app.html are example usages of this library.
 
 It only depends on the excellent Concrete.js library  : http://www.concretejs.com/
 
